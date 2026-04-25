@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>MathGrid</title>
+<style>
+    body {
+        margin: 0;
+        background: #0d0d0d;
+        display: flex;
+        justify-content: center;
+    }
+    canvas {
+        background: #111;
+    }
+</style>
+</head>
+<body>
+
+<canvas id="game" width="480" height="780"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const CELL = 58;
+const GAP = 6;
+const OFFSET_X = 18;
+const OFFSET_Y = 80;
+
+const TILE_W = 70;
+const TILE_H = 58;
+
+let grid = [];
+let tiles = [];
+
+let drag = {
+    active: false,
+    tileIndex: -1,
+    x: 0,
+    y: 0
+};
+
+function setup() {
+    grid = Array.from({length:7},()=>Array(7).fill(null));
+
+    function blank(r,c,val){
+        grid[r][c]={type:"blank",val:-1,ans:val};
+    }
+    function num(r,c,v){
+        grid[r][c]={type:"num",label:v};
+    }
+    function op(r,c,v){
+        grid[r][c]={type:"op",label:v};
+    }
+
+     blank(0,0,12);
+    op   (0,1,"+");
+    blank(0,2,16);
+    op   (0,3,"=");
+    num  (0,4,"28");
+    blank(0,6,19);
+
+    op(1,0,"*");
+    op(1,4,"+");
+    op(1,6,"-");
+
+    num(2,0,"1");
+    op (2,1,"x");
+    num(2,2,"12");
+    op (2,3,"=");
+    num(2,4,"12");
+    num(2,6,"11");
+
+    op(3,0,"=");
+    op(3,2,"/");
+    op(3,4,"+");
+    op(3,6,"=");
+
+    num  (4,0,"12");
+    num  (4,2,"3");
+    op   (4,3,"+");
+    blank(4,4,5);
+    op   (4,5,"=");
+    blank(4,6,8);
+
+    op(5,2,"=");
+    op(5,4,"=");
+
+    num  (6,0,"49");
+    op   (6,1,"-");
+    blank(6,2,4);
+    op   (6,3,"=");
+    blank(6,4,45);
+// Tiles
+tiles = [19,5,8,4,45,12,16,32,63,52].map(v=>({
+    value:v,
+    used:false
+}));
+}
+
+function cellRect(r,c){
+    return {
+        x: OFFSET_X + c*(CELL+GAP),
+        y: OFFSET_Y + r*(CELL+GAP)
+    };
+}
+
+function drawCell(r,c){
+    let cell = grid[r][c];
+    if(!cell) return;
+
+    let {x,y} = cellRect(r,c);
+
+    let color = "#2a2a2a";
+
+    if(cell.type==="blank"){
+        if(cell.val === -1) color="#181818";
+        else if(cell.val===cell.ans) color="#248c5a";
+        else color="#8c2a2a";
+    }
+
+    ctx.fillStyle = color;
+    ctx.fillRect(x,y,CELL,CELL);
+
+    ctx.fillStyle="white";
+    ctx.textAlign="center";
+    ctx.textBaseline="middle";
+    ctx.font="18px Arial";
+
+    let text = "";
+
+    if(cell.type==="blank"){
+        text = cell.val === -1 ? "?" : cell.val;
+    } else {
+        text = cell.label;
+    }
+
+    ctx.fillText(text,x+CELL/2,y+CELL/2);
+}
+
+function drawGrid(){
+    for(let r=0;r<7;r++){
+        for(let c=0;c<7;c++){
+            drawCell(r,c);
+        }
+    }
+}
+
+function tileRect(i){
+    let cols = 5;
+    let row = Math.floor(i/cols);
+    let col = i%cols;
+
+    return {
+        x: 30 + col*(TILE_W+8),
+        y: 600 + row*(TILE_H+8)
+    };
+}
+
+function drawTiles(){
+    tiles.forEach((t,i)=>{
+        if(t.used && drag.tileIndex!==i) return;
+
+        let {x,y} = tileRect(i);
+
+        if(drag.active && drag.tileIndex===i){
+            x = drag.x - TILE_W/2;
+            y = drag.y - TILE_H/2;
+        }
+
+        ctx.fillStyle = "#3a3a3a";
+        ctx.fillRect(x,y,TILE_W,TILE_H);
+
+        ctx.fillStyle="white";
+        ctx.fillText(t.value,x+TILE_W/2,y+TILE_H/2);
+    });
+}
+
+function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    drawGrid();
+    drawTiles();
+}
+
+function getMouse(e){
+    let rect = canvas.getBoundingClientRect();
+    return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+    };
+}
+
+canvas.onmousedown = (e)=>{
+    let m = getMouse(e);
+
+    tiles.forEach((t,i)=>{
+        if(t.used) return;
+
+        let r = tileRect(i);
+        if(m.x>r.x && m.x<r.x+TILE_W &&
+           m.y>r.y && m.y<r.y+TILE_H){
+            drag.active=true;
+            drag.tileIndex=i;
+        }
+    });
+};
+
+canvas.onmousemove = (e)=>{
+    if(!drag.active) return;
+    let m = getMouse(e);
+    drag.x=m.x;
+    drag.y=m.y;
+};
+
+canvas.onmouseup = (e)=>{
+    if(!drag.active) return;
+
+    let m = getMouse(e);
+
+    for(let r=0;r<7;r++){
+        for(let c=0;c<7;c++){
+            let cell = grid[r][c];
+            if(!cell || cell.type!=="blank") continue;
+
+            let rect = cellRect(r,c);
+
+            if(m.x>rect.x && m.x<rect.x+CELL &&
+               m.y>rect.y && m.y<rect.y+CELL){
+
+                let val = tiles[drag.tileIndex].value;
+                cell.val = val;
+                tiles[drag.tileIndex].used = true;
+            }
+        }
+    }
+
+    drag.active=false;
+};
+
+function loop(){
+    draw();
+    requestAnimationFrame(loop);
+}
+
+setup();
+loop();
+</script>
+
+</body>
+</html>
